@@ -56,15 +56,17 @@ jobs:
         push: true
         tags: ${{ steps.docker_meta.outputs.tags }}
         labels: ${{ steps.docker_meta.outputs.labels }}
-
+  
+  
   trigger-app-version-update:
     needs: [update-yahoo]
     runs-on: ubuntu-latest
     steps:
+    
     - name: Set image tag
       id: vars
       run: echo ::set-output name=tag::${GITHUB_REF#refs/*/}
-
+    
     - name: Dispatch version update workflow
       uses: benc-uk/workflow-dispatch@v1
       with:
