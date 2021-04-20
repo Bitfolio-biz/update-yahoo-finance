@@ -3,6 +3,7 @@ var express = require('express');
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
+const { performance } = require('perf_hooks');
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
@@ -11,15 +12,28 @@ var influxClient = require("@influxdata/influxdb-client");
 var yahooFinance = require('yahoo-finance');
 var os = require('os');
 var url = "http://mon-influxdb.monitoring:8086";
-// var url = "http://localhost:8086";
-// var host = 'localhost';
 var host = 'mon-influxdb.monitoring';
+//var url = "http://localhost:8086";
+//var host = 'localhost';
 var port = 8086;
 var tcpPortUsed = require('tcp-port-used');
 
-// run every 30 seconds
+// metrics
+global.pMetrics = {codes: 400, payload: 0, timer: 0, influxAlive: 0};
+var setCodes = function (newVal) { pMetrics.codes = newVal; }
+var setPayload = function (newVal) { pMetrics.payload = newVal; }
+var setTimer = function (newVal) { pMetrics.timer = newVal; }
+var setInfluxAlive = function (newVal) { pMetrics.influxAlive = newVal; }
+var getCodes = function() { return pMetrics.codes; }
+var getPayload = function() { return pMetrics.payload; }
+var getTimer = function() { return pMetrics.timer; }
+var getInfluxAlive = function() { return pMetrics.influxAlive; }
+
+// run every 20 seconds
 setInterval(() => {
-  // Get a price quote
+  // Start timer
+  const t0 = performance.now();
+  // Get yahoo finance api quote
   yahooFinance.quote({
     symbol: 'GBTC',
     modules: ['price']
@@ -27,6 +41,10 @@ setInterval(() => {
     if (err) {
       console.log(err) 
     } else {
+      if (quote.price.regularMarketPrice) {
+        setCodes(200)
+        setPayload(Buffer.byteLength(JSON.stringify(quote)))
+      }
       var price = quote.price.regularMarketPrice || 0.0
       var open = quote.price.regularMarketOpen || 0.0
       var volume = quote.price.regularMarketVolume || 0
@@ -34,6 +52,9 @@ setInterval(() => {
       var symbol = quote.price.symbol || "GBTC"
       var marketCap = quote.price.marketCap || 0
       var tradeTime = quote.price.regularMarketTime || ""
+      // End timer
+      const t1 = performance.now();
+      setTimer(t1 - t0)
       // Write to influxDB
       const writeApi = new influxClient.InfluxDB({ url }).getWriteApi('bitfolio', 'stocks', 's')
       writeApi.useDefaultTags({location: os.hostname()})
@@ -88,7 +109,7 @@ setInterval(() => {
     }
   });
 
-}, 30000)
+}, 20000)
 
 const health = require('@cloudnative/health-connect');
 let healthCheck = new health.HealthChecker();
@@ -97,6 +118,7 @@ const livePromise = () => new Promise((resolve, _reject) => {
   tcpPortUsed.check(port, host)
     .then(function(inUse){
     // console.log('Port ' + port + ' usage : ' + inUse);
+    setInfluxAlive(0)
     resolve();
   }, function(err){
     console.log('Error on check : ', err.message);
@@ -109,6 +131,22 @@ healthCheck.registerLivenessCheck(liveCheck);
 
 let readyCheck = new health.ReadinessCheck('ReadyCheck', livePromise) 
 healthCheck.registerReadinessCheck(readyCheck);
+
+// metrics for prometheus: codes, payload, timer, influxAlive
+// format response for metrics, example:
+// http_requests_total{method="post",code="200"} 1027 1395066363000
+function createMetrics() {
+  const timestamp = Date.now();
+  return "update_yahoo_finance_code " + getCodes() + " " + timestamp + "\n"
+  + "update_yahoo_finance_payload " + getPayload() + " " + timestamp + "\n"
+  + "update_yahoo_finance_timer " + getTimer() + " " + timestamp + "\n"
+  + "update_yahoo_finance_influx_alive " + getInfluxAlive() + " " + timestamp + "\n";
+}
+
+var metricsRouter = express.Router();
+metricsRouter.get('/', (req, res, next) => {
+  res.send(createMetrics());
+});
 
 var app = express();
 
@@ -124,6 +162,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter);
 app.use('/users', usersRouter);
+
+// metrics
+app.use('/metrics', metricsRouter);
 
 // health checks
 app.use('/live', health.LivenessEndpoint(healthCheck));
