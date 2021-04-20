@@ -1,0 +1,20 @@
+{
+  "name": "yahoo-finance-app",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./bin/www"
+  },
+  "dependencies": {
+    "@cloudnative/health-connect": "^2.1.0",
+    "@influxdata/influxdb-client": "^1.12.0",
+    "cookie-parser": "~1.4.4",
+    "debug": "~2.6.9",
+    "express": "~4.16.1",
+    "http-errors": "~1.6.3",
+    "jade": "^0.29.0",
+    "morgan": "~1.9.1",
+    "tcp-port-used": "^1.0.2",
+    "yahoo-finance": "^0.3.7"
+  }
+}
