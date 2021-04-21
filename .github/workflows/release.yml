@@ -8,7 +8,8 @@ on:
       - 'v*'
 
 jobs:
-  update-yahoo:
+
+  job1:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -56,10 +57,9 @@ jobs:
         push: true
         tags: ${{ steps.docker_meta.outputs.tags }}
         labels: ${{ steps.docker_meta.outputs.labels }}
-  
-  
-  trigger-app-version-update:
-    needs: [update-yahoo]
+
+  job2:
+    needs: [job1]
     runs-on: ubuntu-latest
     steps:
     
