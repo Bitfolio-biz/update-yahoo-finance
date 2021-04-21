@@ -1,4 +1,4 @@
-name: Release tagged version
+name: Tagged version deploy
 
 on:
   push:
